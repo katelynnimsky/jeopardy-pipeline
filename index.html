@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jeopardy Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cream: #F5F0E8;
+    --ink: #1A1814;
+    --green: #1a6b4a;
+    --green-light: #a8dfc7;
+    --green-mid: #2d9e6e;
+    --gold: #C8971A;
+    --muted: #8a8478;
+    --border: #D8D2C4;
+    --card: #FDFAF5;
+    --error: #C0392B;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    padding: 2rem 3rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+  }
+  header h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2rem;
+    letter-spacing: -0.02em;
+  }
+  header h1 em { font-style: italic; color: var(--green); }
+  .step-pills {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+  .step-pill {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    padding: 4px 12px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: transparent;
+    transition: all 0.2s;
+  }
+  .step-pill.active {
+    background: var(--ink);
+    color: var(--cream);
+    border-color: var(--ink);
+  }
+  .step-pill.done {
+    background: var(--green);
+    color: white;
+    border-color: var(--green);
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; padding: 3rem; max-width: 900px; margin: 0 auto; }
+  .screen.active { display: block; }
+
+  /* ── SCREEN 1: UPLOAD ── */
+  .api-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+  .api-row label {
+    font-size: 13px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .api-row input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+  }
+  .api-row input:focus { border-color: var(--green); }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 4rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--card);
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--green);
+    background: #f0faf5;
+  }
+  .drop-zone .icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    display: block;
+  }
+  .drop-zone h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .drop-zone p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 1.5rem;
+  }
+  .drop-zone input[type="file"] { display: none; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--green); color: white; }
+  .btn-primary:hover { background: #155a3d; }
+  .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--ink); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .file-info {
+    display: none;
+    margin-top: 1.5rem;
+    padding: 1rem 1.25rem;
+    background: #f0faf5;
+    border: 1px solid var(--green-light);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--green);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── SCREEN 2: REVIEW ── */
+  .review-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .review-header h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.75rem;
+  }
+  .review-header p { font-size: 13px; color: var(--muted); margin-top: 0.25rem; }
+
+  .loading-state {
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+  .loading-state .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1.5rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-state p { color: var(--muted); font-size: 14px; }
+
+  /* Category columns */
+  .categories-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 1.5rem;
+  }
+  .cat-col { display: flex; flex-direction: column; gap: 6px; }
+  .cat-col-header {
+    background: var(--green);
+    color: var(--green-light);
+    font-size: 10px;
+    font-weight: 500;
+    text-align: center;
+    padding: 8px 6px;
+    border-radius: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: 'DM Mono', monospace;
+  }
+  .cat-col-header input {
+    background: transparent;
+    border: none;
+    color: var(--green-light);
+    font-size: 10px;
+    font-weight: 500;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: 'DM Mono', monospace;
+    width: 100%;
+    outline: none;
+  }
+  .cat-col-header input::placeholder { color: rgba(168,223,199,0.6); }
+
+  .quote-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.4;
+    position: relative;
+    cursor: grab;
+  }
+  .quote-card:active { cursor: grabbing; }
+  .quote-card .pts-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--green);
+    font-weight: 500;
+    margin-bottom: 3px;
+  }
+  .quote-card .who-tag {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .quote-card select {
+    width: 100%;
+    margin-top: 5px;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 4px;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .unassigned-section {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: #fff8f0;
+    border: 1px solid #e8d5b0;
+    border-radius: 10px;
+  }
+  .unassigned-section h3 {
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    color: var(--gold);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .unassigned-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .review-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    justify-content: flex-end;
+  }
+
+  /* ── SCREEN 3: GAME ── */
+  .game-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+  }
+  .score-display { font-size: 22px; font-weight: 500; }
+  .score-display span { font-size: 14px; font-weight: 400; color: var(--muted); margin-right: 6px; }
+  .game-actions { display: flex; gap: 0.5rem; }
+
+  .jgrid {
+    display: grid;
+    gap: 7px;
+  }
+  .jcat-header {
+    background: var(--green);
+    color: var(--green-light);
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+    padding: 10px 6px;
+    border-radius: 8px;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.3;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: 'DM Mono', monospace;
+  }
+  .tile-wrap { perspective: 700px; height: 88px; cursor: pointer; }
+  .tile { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.45s ease; }
+  .tile.flipped { transform: rotateY(180deg); }
+  .tile-front, .tile-back {
+    position: absolute; width: 100%; height: 100%;
+    backface-visibility: hidden; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 8px; box-sizing: border-box;
+  }
+  .tile-front {
+    background: var(--green); color: #d4f5e5;
+    font-size: 17px; font-weight: 500;
+    border: 0.5px solid var(--green-mid);
+    font-family: 'DM Serif Display', serif;
+  }
+  .tile-front.used { background: #e8e8e6; border: 0.5px solid #ddd; color: transparent; cursor: default; }
+  .tile-back {
+    background: white; border: 2px solid var(--green-mid);
+    color: var(--ink); font-size: 11px; line-height: 1.4;
+    transform: rotateY(180deg); flex-direction: column; gap: 6px;
+  }
+  .quote-text { font-size: 11px; line-height: 1.4; }
+  .reveal-btn {
+    font-size: 11px; padding: 3px 10px; border-radius: 8px;
+    border: 0.5px solid var(--green-mid); background: transparent;
+    color: var(--green); cursor: pointer; margin-top: 2px; white-space: nowrap;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .reveal-btn:hover { background: #e6f7f0; }
+  .who-label { font-size: 11px; font-weight: 500; color: var(--green); display: none; }
+  .who-label.visible { display: block; }
+
+  .error-msg {
+    color: var(--error);
+    font-size: 13px;
+    margin-top: 0.75rem;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .export-note {
+    margin-top: 1.5rem;
+    padding: 1rem 1.25rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Jeopardy <em>Builder</em></h1>
+  <div class="step-pills">
+    <div class="step-pill active" id="pill-1">01 Upload</div>
+    <div class="step-pill" id="pill-2">02 Review</div>
+    <div class="step-pill" id="pill-3">03 Play</div>
+  </div>
+</header>
+
+<!-- SCREEN 1: UPLOAD -->
+<div class="screen active" id="screen-1">
+  <div class="api-row">
+    <label>ANTHROPIC API KEY</label>
+    <input type="password" id="api-key" placeholder="sk-ant-..." />
+  </div>
+
+  <div class="drop-zone" id="drop-zone">
+    <span class="icon">📊</span>
+    <h2>Drop your Excel file here</h2>
+    <p>Any column names — Claude will figure out which is the quote, who said it, and difficulty.<br>Supports .xlsx and .csv</p>
+    <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Choose file</button>
+    <input type="file" id="file-input" accept=".xlsx,.xls,.csv" />
+  </div>
+
+  <div class="file-info" id="file-info"></div>
+  <div class="error-msg" id="upload-error"></div>
+
+  <div style="margin-top:1.5rem; display:flex; justify-content:flex-end;">
+    <button class="btn btn-primary" id="btn-analyze" disabled onclick="analyzeQuotes()">Analyze with AI →</button>
+  </div>
+</div>
+
+<!-- SCREEN 2: REVIEW -->
+<div class="screen" id="screen-2">
+  <div class="review-header">
+    <div>
+      <h2>Review & adjust</h2>
+      <p>AI has suggested categories and point values. Edit category names or reassign quotes below.</p>
+    </div>
+  </div>
+
+  <div class="loading-state" id="loading-state">
+    <div class="spinner"></div>
+    <p id="loading-msg">Sending quotes to Claude...</p>
+  </div>
+
+  <div id="review-content" style="display:none;">
+    <div class="categories-grid" id="categories-grid"></div>
+    <div class="unassigned-section" id="unassigned-section" style="display:none;">
+      <h3>⚠ Unassigned quotes</h3>
+      <div class="unassigned-list" id="unassigned-list"></div>
+    </div>
+    <div class="error-msg" id="review-error"></div>
+    <div class="review-actions">
+      <button class="btn btn-secondary" onclick="goToScreen(1)">← Back</button>
+      <button class="btn btn-primary" onclick="buildGame()">Build board →</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 3: GAME -->
+<div class="screen" id="screen-3">
+  <div class="game-topbar">
+    <div class="score-display"><span>Score</span><span id="score">0</span></div>
+    <div class="game-actions">
+      <button class="btn btn-secondary" onclick="resetGame()">Reset</button>
+      <button class="btn btn-secondary" onclick="goToScreen(2)">← Edit board</button>
+      <button class="btn btn-primary" onclick="exportHTML()">Export HTML</button>
+    </div>
+  </div>
+  <div class="jgrid" id="jgrid"></div>
+  <div class="export-note">Tip: Click "Export HTML" to download a standalone file you can open anywhere or host on GitHub Pages.</div>
+</div>
+
+<script>
+// ── STATE ──
+let apiKey = '';
+let rawQuotes = [];
+let boardData = []; // [{category, pts, quote, who}] × 5 cols × N rows
+let categories = [];
+let score = 0;
+const flipped = new Set();
+const revealed = new Set();
+
+// ── SCREEN NAV ──
+function goToScreen(n) {
+  document.querySelectorAll('.screen').forEach((s,i) => {
+    s.classList.toggle('active', i === n-1);
+  });
+  document.querySelectorAll('.step-pill').forEach((p,i) => {
+    p.classList.remove('active','done');
+    if (i < n-1) p.classList.add('done');
+    if (i === n-1) p.classList.add('active');
+  });
+}
+
+// ── FILE UPLOAD ──
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  document.getElementById('upload-error').textContent = '';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if (!rows.length) throw new Error('No data found in file.');
+      rawQuotes = rows;
+      document.getElementById('file-info').style.display = 'block';
+      document.getElementById('file-info').textContent = `✓ ${file.name} — ${rows.length} rows detected`;
+      document.getElementById('btn-analyze').disabled = false;
+    } catch(err) {
+      document.getElementById('upload-error').textContent = 'Error reading file: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── AI ANALYSIS ──
+async function analyzeQuotes() {
+  apiKey = document.getElementById('api-key').value.trim();
+  if (!apiKey) {
+    document.getElementById('upload-error').textContent = 'Please enter your Anthropic API key.';
+    return;
+  }
+  if (!rawQuotes.length) {
+    document.getElementById('upload-error').textContent = 'Please upload a file first.';
+    return;
+  }
+
+  goToScreen(2);
+  document.getElementById('loading-state').style.display = 'block';
+  document.getElementById('review-content').style.display = 'none';
+
+  const messages = [
+    {
+      role: 'user',
+      content: `You are helping build a Jeopardy game from a list of quotes from a friend group.
+
+Here is the raw data from an uploaded spreadsheet. The columns may have any names — figure out which column contains the quote, who said it, and the difficulty (easy/medium/hard). If there is no difficulty column, infer it from the content.
+
+Raw data:
+${JSON.stringify(rawQuotes, null, 2)}
+
+Your job:
+1. Parse the data to extract: quote, who, difficulty (easy/medium/hard)
+2. Suggest exactly 5 thematic category names that fit the quotes
+3. Assign each quote to a category and a point value:
+   - easy → 100 or 200 (randomly vary)
+   - medium → 300 or 400 (randomly vary)
+   - hard → 500
+   - If there are more than 5 quotes per category or uneven distribution, balance as needed
+4. Each category should have 5 quotes ideally (for a 5x5 board). If there are more quotes than 25, assign the extras as "unassigned". If fewer than 25, note which categories have gaps.
+
+Respond ONLY with a JSON object, no markdown, no preamble:
+{
+  "categories": ["Cat1", "Cat2", "Cat3", "Cat4", "Cat5"],
+  "assignments": [
+    {"quote": "...", "who": "...", "difficulty": "easy", "category": "Cat1", "pts": 100},
+    ...
+  ],
+  "unassigned": [
+    {"quote": "...", "who": "...", "difficulty": "hard"}
+  ]
+}`
+    }
+  ];
+
+  try {
+    document.getElementById('loading-msg').textContent = 'Claude is reading your quotes...';
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || 'API error');
+    }
+
+    document.getElementById('loading-msg').textContent = 'Sorting into categories...';
+    const data = await res.json();
+    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    renderReview(parsed);
+  } catch(err) {
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('review-content').style.display = 'block';
+    document.getElementById('review-error').textContent = 'Error: ' + err.message;
+  }
+}
+
+// ── RENDER REVIEW ──
+let currentAssignments = [];
+let currentCategories = [];
+let currentUnassigned = [];
+
+function renderReview(parsed) {
+  currentCategories = parsed.categories || [];
+  currentAssignments = parsed.assignments || [];
+  currentUnassigned = parsed.unassigned || [];
+
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('review-content').style.display = 'block';
+
+  const grid = document.getElementById('categories-grid');
+  grid.style.gridTemplateColumns = `repeat(${currentCategories.length}, 1fr)`;
+  grid.innerHTML = '';
+
+  currentCategories.forEach((cat, ci) => {
+    const col = document.createElement('div');
+    col.className = 'cat-col';
+    col.dataset.cat = cat;
+
+    const header = document.createElement('div');
+    header.className = 'cat-col-header';
+    const inp = document.createElement('input');
+    inp.value = cat;
+    inp.dataset.ci = ci;
+    inp.addEventListener('change', e => { currentCategories[ci] = e.target.value; });
+    header.appendChild(inp);
+    col.appendChild(header);
+
+    const catQuotes = currentAssignments.filter(a => a.category === cat)
+      .sort((a,b) => a.pts - b.pts);
+
+    catQuotes.forEach(q => {
+      col.appendChild(makeQuoteCard(q));
+    });
+
+    grid.appendChild(col);
+  });
+
+  // Unassigned
+  if (currentUnassigned.length) {
+    document.getElementById('unassigned-section').style.display = 'block';
+    const list = document.getElementById('unassigned-list');
+    list.innerHTML = '';
+    currentUnassigned.forEach(q => {
+      list.appendChild(makeQuoteCard(q, true));
+    });
+  } else {
+    document.getElementById('unassigned-section').style.display = 'none';
+  }
+}
+
+function makeQuoteCard(q, isUnassigned=false) {
+  const card = document.createElement('div');
+  card.className = 'quote-card';
+
+  if (!isUnassigned) {
+    const pts = document.createElement('div');
+    pts.className = 'pts-badge';
+    pts.textContent = '$' + q.pts;
+    card.appendChild(pts);
+  }
+
+  const qt = document.createElement('div');
+  qt.textContent = q.quote;
+  card.appendChild(qt);
+
+  const who = document.createElement('div');
+  who.className = 'who-tag';
+  who.textContent = '— ' + (q.who || '?');
+  card.appendChild(who);
+
+  // Reassign dropdown
+  const sel = document.createElement('select');
+  if (isUnassigned) {
+    const def = document.createElement('option');
+    def.value = '';
+    def.textContent = 'Assign to category...';
+    sel.appendChild(def);
+  }
+  currentCategories.forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = cat;
+    if (!isUnassigned && cat === q.category) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', e => {
+    const newCat = e.target.value;
+    if (isUnassigned && newCat) {
+      // move from unassigned to assignments
+      currentUnassigned = currentUnassigned.filter(u => u.quote !== q.quote);
+      q.category = newCat;
+      q.pts = q.difficulty === 'easy' ? 100 : q.difficulty === 'medium' ? 300 : 500;
+      currentAssignments.push(q);
+    } else {
+      const existing = currentAssignments.find(a => a.quote === q.quote);
+      if (existing) existing.category = newCat;
+    }
+    renderReview({categories: currentCategories, assignments: currentAssignments, unassigned: currentUnassigned});
+  });
+  card.appendChild(sel);
+
+  return card;
+}
+
+// ── BUILD GAME ──
+function buildGame() {
+  // Build board: 5 cols (categories), each with up to 6 rows sorted by pts
+  categories = [...currentCategories];
+  boardData = categories.map(cat => {
+    return currentAssignments
+      .filter(a => a.category === cat)
+      .sort((a,b) => a.pts - b.pts);
+  });
+
+  const maxRows = Math.max(...boardData.map(c => c.length));
+
+  goToScreen(3);
+  score = 0;
+  flipped.clear();
+  revealed.clear();
+  document.getElementById('score').textContent = 0;
+
+  const grid = document.getElementById('jgrid');
+  grid.style.gridTemplateColumns = `repeat(${categories.length}, minmax(0,1fr))`;
+  renderGameBoard();
+}
+
+function renderGameBoard() {
+  const grid = document.getElementById('jgrid');
+  grid.innerHTML = '';
+
+  const maxRows = Math.max(...boardData.map(c => c.length));
+
+  // Headers
+  categories.forEach(cat => {
+    const h = document.createElement('div');
+    h.className = 'jcat-header';
+    h.textContent = cat;
+    grid.appendChild(h);
+  });
+
+  // Tiles
+  for (let row = 0; row < maxRows; row++) {
+    for (let col = 0; col < categories.length; col++) {
+      const t = boardData[col][row];
+      if (!t) {
+        const empty = document.createElement('div');
+        grid.appendChild(empty);
+        continue;
+      }
+      const key = col + '-' + row;
+      const wrap = document.createElement('div');
+      wrap.className = 'tile-wrap';
+      const inner = document.createElement('div');
+      inner.className = 'tile' + (flipped.has(key) ? ' flipped' : '');
+      inner.id = 'jtile-' + key;
+
+      const front = document.createElement('div');
+      front.className = flipped.has(key) ? 'tile-front used' : 'tile-front';
+      front.textContent = flipped.has(key) ? '' : '$' + t.pts;
+
+      const back = document.createElement('div');
+      back.className = 'tile-back';
+      const qt = document.createElement('div');
+      qt.className = 'quote-text';
+      qt.textContent = t.quote;
+      const whoEl = document.createElement('div');
+      whoEl.className = 'who-label' + (revealed.has(key) ? ' visible' : '');
+      whoEl.id = 'jwho-' + key;
+      whoEl.textContent = '— ' + (t.who || '?');
+      const btn = document.createElement('button');
+      btn.className = 'reveal-btn';
+      btn.textContent = revealed.has(key) ? 'revealed' : 'reveal';
+      btn.disabled = revealed.has(key);
+      btn.style.opacity = revealed.has(key) ? '0.4' : '1';
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        revealed.add(key);
+        whoEl.classList.add('visible');
+        btn.textContent = 'revealed';
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+      });
+      back.appendChild(qt);
+      back.appendChild(whoEl);
+      back.appendChild(btn);
+      inner.appendChild(front);
+      inner.appendChild(back);
+      wrap.appendChild(inner);
+
+      if (!flipped.has(key)) {
+        wrap.addEventListener('click', function handler() {
+          flipped.add(key);
+          inner.classList.add('flipped');
+          front.className = 'tile-front used';
+          score += t.pts;
+          document.getElementById('score').textContent = score;
+          wrap.removeEventListener('click', handler);
+        });
+      }
+      grid.appendChild(wrap);
+    }
+  }
+}
+
+function resetGame() {
+  score = 0;
+  flipped.clear();
+  revealed.clear();
+  document.getElementById('score').textContent = 0;
+  renderGameBoard();
+}
+
+// ── EXPORT HTML ──
+function exportHTML() {
+  const maxRows = Math.max(...boardData.map(c => c.length));
+  const boardJSON = JSON.stringify(boardData);
+  const catsJSON = JSON.stringify(categories);
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jeopardy</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F5F0E8;min-height:100vh;padding:2rem 1rem;}
+  .jboard{max-width:960px;margin:0 auto;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;}
+  .score-display{font-size:22px;font-weight:500;}
+  .score-display span{font-size:14px;font-weight:400;color:#8a8478;margin-right:6px;}
+  .reset-btn{font-size:13px;padding:6px 14px;border-radius:8px;border:0.5px solid #D8D2C4;background:transparent;color:#666;cursor:pointer;}
+  .reset-btn:hover{background:#eee;}
+  .grid{display:grid;grid-template-columns:repeat(${categories.length},minmax(0,1fr));gap:7px;}
+  .cat-header{background:#1a6b4a;color:#a8dfc7;font-size:11px;font-weight:500;text-align:center;padding:10px 6px;border-radius:8px;min-height:56px;display:flex;align-items:center;justify-content:center;line-height:1.3;text-transform:uppercase;letter-spacing:0.05em;}
+  .tile-wrap{perspective:700px;height:88px;cursor:pointer;}
+  .tile{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform 0.45s ease;}
+  .tile.flipped{transform:rotateY(180deg);}
+  .tile-front,.tile-back{position:absolute;width:100%;height:100%;backface-visibility:hidden;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;padding:8px;box-sizing:border-box;}
+  .tile-front{background:#1a6b4a;color:#d4f5e5;font-size:17px;font-weight:500;border:0.5px solid #2d9e6e;}
+  .tile-front.used{background:#e8e8e6;border:0.5px solid #ddd;color:transparent;cursor:default;}
+  .tile-back{background:#fff;border:2px solid #2d9e6e;color:#1a1814;font-size:11px;line-height:1.4;transform:rotateY(180deg);flex-direction:column;gap:6px;justify-content:center;}
+  .quote-text{font-size:11px;line-height:1.4;}
+  .reveal-btn{font-size:11px;padding:3px 10px;border-radius:8px;border:0.5px solid #2d9e6e;background:transparent;color:#1a6b4a;cursor:pointer;margin-top:2px;}
+  .reveal-btn:hover{background:#e6f7f0;}
+  .who-label{font-size:11px;font-weight:500;color:#1a6b4a;display:none;}
+  .who-label.visible{display:block;}
+</style>
+</head>
+<body>
+<div class="jboard">
+  <div class="topbar">
+    <div class="score-display"><span>Score</span><span id="score">0</span></div>
+    <button class="reset-btn" onclick="resetBoard()">Reset</button>
+  </div>
+  <div class="grid" id="board"></div>
+</div>
+<script>
+const categories=${catsJSON};
+const BOARD=${boardJSON};
+let score=0;
+const flipped=new Set();
+const revealed=new Set();
+function buildBoard(){
+  const board=document.getElementById('board');
+  board.innerHTML='';
+  categories.forEach(cat=>{
+    const h=document.createElement('div');
+    h.className='cat-header';
+    h.textContent=cat;
+    board.appendChild(h);
+  });
+  const maxRows=Math.max(...BOARD.map(c=>c.length));
+  for(let row=0;row<maxRows;row++){
+    for(let col=0;col<categories.length;col++){
+      const t=BOARD[col][row];
+      if(!t){board.appendChild(document.createElement('div'));continue;}
+      const key=col+'-'+row;
+      const wrap=document.createElement('div');
+      wrap.className='tile-wrap';
+      const inner=document.createElement('div');
+      inner.className='tile'+(flipped.has(key)?' flipped':'');
+      const front=document.createElement('div');
+      front.className=flipped.has(key)?'tile-front used':'tile-front';
+      front.textContent=flipped.has(key)?'':'$'+t.pts;
+      const back=document.createElement('div');
+      back.className='tile-back';
+      const qt=document.createElement('div');
+      qt.className='quote-text';
+      qt.textContent=t.quote;
+      const whoEl=document.createElement('div');
+      whoEl.className='who-label'+(revealed.has(key)?' visible':'');
+      whoEl.textContent='— '+(t.who||'?');
+      const btn=document.createElement('button');
+      btn.className='reveal-btn';
+      btn.textContent=revealed.has(key)?'revealed':'reveal';
+      btn.disabled=revealed.has(key);
+      btn.style.opacity=revealed.has(key)?'0.4':'1';
+      btn.addEventListener('click',e=>{
+        e.stopPropagation();
+        revealed.add(key);
+        whoEl.classList.add('visible');
+        btn.textContent='revealed';
+        btn.disabled=true;
+        btn.style.opacity='0.4';
+      });
+      back.appendChild(qt);back.appendChild(whoEl);back.appendChild(btn);
+      inner.appendChild(front);inner.appendChild(back);
+      wrap.appendChild(inner);
+      if(!flipped.has(key)){
+        wrap.addEventListener('click',function h(){
+          flipped.add(key);
+          inner.classList.add('flipped');
+          front.className='tile-front used';
+          score+=t.pts;
+          document.getElementById('score').textContent=score;
+          wrap.removeEventListener('click',h);
+        });
+      }
+      board.appendChild(wrap);
+    }
+  }
+}
+function resetBoard(){flipped.clear();revealed.clear();score=0;document.getElementById('score').textContent=0;buildBoard();}
+buildBoard();
+<\/script>
+</body>
+</html>`;
+
+  const blob = new Blob([html], {type: 'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jeopardy.html';
+  a.click();
+}
+</script>
+</body>
+</html>
